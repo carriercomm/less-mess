@@ -7,3 +7,6 @@
 [submodule "libs/terminal"]
 	path = libs/terminal
 	url = git@github.com:jcubic/jquery.terminal.git
+[submodule "libs/mousetrap"]
+	path = libs/mousetrap
+	url = https://github.com/ccampbell/mousetrap.git
