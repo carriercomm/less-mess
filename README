@@ -1,0 +1,22 @@
+     ___
+    /  /
+   /  /_____ _____ _____    ______ _____ _____ _____
+  /  // _  // ___// ___/   /     // _  // ___// ___/
+ /  // ___//__  //__  /   / / / // ___//__  //__  /
+/__//____//____//____/   /_/ /_//____//____//____/
+                                            ver. 0.1
+
+------------------------------------------------------------------------------
+:: Web based Command Line Server Admin Tool
+------------------------------------------------------------------------------
+
+Ultimate Administration tool for hackers, that support terminal with usefull
+commands, access to raw shell and CodeMirror based Emacs Like Editor.
+
+------------------------------------------------------------------------------
+:: License
+------------------------------------------------------------------------------
+
+Copyright (c) 2012 Jakub Jankiewicz <http://jcubic.pl>
+
+Licensed under GNU LGPL Version 3 license
