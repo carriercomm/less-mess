@@ -1,7 +1,8 @@
 <?php
 
-require('libs/json-rpc/json-rpc.php');
-require('libs/Database.php');
+require_once('libs/json-rpc/json-rpc.php');
+require_once('libs/Database.php');
+error_reporting(E_ERROR | E_WARNING | E_PARSE | E_NOTICE);
 
 class User {
     function __construct($username, $password) {
@@ -10,22 +11,14 @@ class User {
     }
 }
 
-
-
 class Session {
-    private $storage;
-    private $token;
-    private $username;
+    public $storage;
+    public $token;
+    public $username;
     private function __construct($username, $token, $storage) {
         $this->storage = $storage;
         $this->token = $token;
         $this->username = $username;
-    }
-    function username() {
-        return $this->username;
-    }
-    function token() {
-        return $this->token;
     }
     function __get($name) {
         return $this->storage->$name;
@@ -45,6 +38,10 @@ class Session {
         }
         return $result;
     }
+    static function cast($stdClass) {
+        $storage = $stdClass->storage ? $stdClass->storage : new stdClass();
+        return new Session($stdClass->username, $stdClass->token, $storage);
+    }
     static function new_session($username) {
         $token = sha1(array_sum(explode(' ', microtime())));
         return new Session($username, $token, new stdClass());
@@ -63,17 +60,23 @@ class Service {
         $this->config_file = $config_file;
         if (file_exists($config_file)) {
             try {
-                $this->config = json_decode(file_get_contetns($config_file));
+                $this->config = json_decode(file_get_contents($config_file));
             } catch (Exception $e) {
                 $this->config = new stdClass();
             }
         } else {
             $this->config = new stdClass();
         }
-        if (!isset($this->config->sessions)) {
+        if (!isset($this->config->sessions) || !is_array($this->config->sessions)) {
             $this->config->sessions = array();
+        } else {
+            $this->config->sessions = array_map(function($session) {
+                return Session::cast($session);
+            }, array_filter($this->config->sessions, function($session) {
+                return isset($session->token) && isset($session->username);
+            }));
         }
-        if (!isset($this->config->users)) {
+        if (!isset($this->config->users) || !is_array($this->config->sessions)) {
             $this->config->users = array();
         }
     }
@@ -93,7 +96,7 @@ class Service {
     // -----------------------------------------------------------------
     private function get_user_index($username) {
         foreach($this->config->users as $i => $user) {
-            if ($username == $user['username']) {
+            if ($username == $user->username) {
                 return $i;
             }
         }
@@ -103,23 +106,25 @@ class Service {
     // -----------------------------------------------------------------
     // SESSIONS
     // -----------------------------------------------------------------
-    private function new_session($username) {
+    public function new_session($username) {
         return $this->config->sessions[] = Session::new_session($username);
     }
 
     // -----------------------------------------------------------------
-    private function delete_session($token) {
+    public function delete_session($token) {
         //need index to unset and indexes may not be sequential
         foreach (array_keys($this->config->sessions) as $i) {
-            if ($token == $this->config->sessions[$i]->token()) {
+            if ($token == $this->config->sessions[$i]->token) {
                 unset($this->config->sessions[$i]);
+                return true;
             }
         }
+        return false;
     }
     // -----------------------------------------------------------------
-    private function get_session($token) {
+    public function get_session($token) {
         foreach ($this->config->sessions as $session) {
-            if ($token == $session->token()) {
+            if ($token == $session->token) {
                 return $session;
             }
         }
@@ -128,29 +133,20 @@ class Service {
     // -----------------------------------------------------------------
     public function get_username($token) {
         $session = $this->get_session($token);
-        return $session ? $session->name : null;
+        return $session ? $session->username : null;
     }
-
-    // -----------------------------------------------------------------
-    private function get_session($token) {
-        foreach ($this->config->sessions as $session) {
-            if ($session->token == $token) {
-                return $session;
-            }
-        }
-        return null;
-    }
-
 
     // -----------------------------------------------------------------
     private function __write($filename, $content) {
+        /*
         if (!file_exists($filename)) {
             throw new Exception("File '$filename' don't exists");
         }
         if (!is_writable($filename)) {
             throw new Exception("You don't have write permission to file '$filename'");
         }
-        $file = fopen($filename, 'w');
+        */
+        $file = fopen($filename, 'w+');
         if (!$file) {
             throw new Exception("Couldn't open file '$filename' for write");
         }
@@ -158,7 +154,16 @@ class Service {
         fclose($file);
     }
 
-
+    // -----------------------------------------------------------------
+    public function installed() {
+        if (empty($this->config->users)) {
+            return false;
+        } else {
+            $admin = $this->get_user('admin');
+            return $admin != null && isset($admin->password) &&
+                preg_match(self::password_regex, $admin->password);
+        }
+    }
 
     // -----------------------------------------------------------------
     public function valid_token($token) {
@@ -166,30 +171,24 @@ class Service {
     }
 
     // -----------------------------------------------------------------
-    // -----------------------------------------------------------------
     function login($username, $password) {
         $user = $this->get_user($username);
         if (!$user) {
             throw new Exception("'$username' is invalid username");
         }
-        if (!$user['password']) {
+        if (!$user->password) {
             throw new Exception("Password for user '$username' not set");
         }
-        preg_match, $user['password'], $match);
+        preg_match(self::password_regex, $user->password, $match);
         if (!$match) {
             throw new Exception("Password for user '$username' have invalid format");
         }
         if ($match[2] == call_user_func($match[1], $password)) {
-            return $this->new_session($username)->token();
+            return $this->new_session($username)->token;
         } else {
             throw new Exception("Password for user '$username' is invalid");
         }
     }
-
-    private function create_session($username) {
-        $this->config->sessions[] = new 
-    }
-
 
     // -----------------------------------------------------------------
     public function session_set($token, $name, $value) {
@@ -197,8 +196,7 @@ class Service {
             throw new Exception("Access Denied: Invalid Token");
         }
         $session = $this->get_session($token);
-        $session->session->
-        $this->config->session[$this->get_username()][$name] = $value;
+        $session->$name = $value;
     }
 
     // -----------------------------------------------------------------
@@ -214,7 +212,11 @@ class Service {
 
     // -----------------------------------------------------------------
     public function session_get($token, $name) {
-        return $this->config['session'][$this->get_username()][$name];
+        if (!$this->valid_token($token)) {
+            throw new Exception("Access Denied: Invalid Token");
+        }
+        $session = $this->get_session($token);
+        return $session->$name;
     }
 
     // -----------------------------------------------------------------
@@ -234,10 +236,15 @@ class Service {
         $this->__write($filename, $content);
     }
 
-
-
     // -----------------------------------------------------------------
     // ADMIN
+    // -----------------------------------------------------------------
+
+    function get_config($token) {
+        $this->validate_admin($token);
+        return $this->config;
+    }
+
     // -----------------------------------------------------------------
     private function create_admin_password($password) {
         $password = call_user_func(self::password_crypt, $password);
@@ -246,9 +253,8 @@ class Service {
     }
     // executed when config file don't exists
     public function set_admin_password($password) {
-        if (file_exists($this->config_file)) {
-            throw new Exception("File '" . $this->config_file . "' exists, you ".
-                "can set admin password only once");
+        if ($this->installed()) {
+            throw new Exception("You can't call this function, Admin already installed");
         }
         $this->create_admin_password($password);
     }
@@ -275,7 +281,7 @@ class Service {
         if (($idx = $this->get_user_index($this->get_username($token))) == -1) {
             throw new Exception("User '$username' don't exists");
         }
-        if ($this->config->users[] = new User($username, $password);
+        $this->config->users[] = new User($username, $password);
         
         // remove session
         foreach($this->config->tokens as $token => $token_username) {
@@ -297,8 +303,14 @@ class Service {
             throw new Exception("Access Denied: Invalid Token");
         }
         return array_map(function($user) {
-            return $user->name;
+            return $user->username;
         }, $this->config->users);
+    }
+    public function function_exists($token, $function) {
+        if ($this->installed() && !$this->valid_token($token)) {
+            throw new Exception("Access Denied: Invalid Token");
+        }
+        return function_exists($function);
     }
 
     // -----------------------------------------------------------------
@@ -333,14 +345,14 @@ class Service {
     // -----------------------------------------------------------------
     private function mysql_connection_from_session($session) {
         if (!(isset($session->db_host) && isset($session->db_user) &&
-              isset($session->db_pass) && isset($session->db_name)) {
+              isset($session->db_pass) && isset($session->db_name))) {
             throw new Exception("You need to connect to database first" .
                 " so your database info will be stored in session");
         }
-        $db = $this->mysql_create_connection($session->db_host,
-                                             $session->db_user,
-                                             $session->db_pass,
-                                             $session->db_name);
+        return $this->mysql_create_connection($session->db_host,
+                                              $session->db_user,
+                                              $session->db_pass,
+                                              $session->db_name);
     }
 
     // -----------------------------------------------------------------
@@ -362,7 +374,13 @@ class Service {
     }
 }
 
+class JSONRpcSrvice {
+    function __construct() {
+        $this->server = new JSONRpcServer($this);
+    }
+}
 
-handle_json_rpc(new Service());
+echo handle_json_rpc(new Service('config.json'));
+
 
 ?>

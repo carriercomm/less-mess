@@ -1,0 +1,7 @@
+RewriteEngine on
+
+AddHandler cgi-script .py
+Options +ExecCGI
+
+RewriteCond %{SCRIPT_FILENAME} config.json
+RewriteRule .* - [F]
