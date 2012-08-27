@@ -1,14 +1,15 @@
-jQuery(function($) {
+$(function() {
+
     var header = [
-        '    _       _           _         _____           _ ',
-        '   / \\   __| |_ __ ___ (_)_ __   |_   _|__   ___ | |',
-        '  / _ \\ / _` | \'_ ` _ \\| | \'_ \\    | |/ _ \\ / _ \\| |',
-        ' / ___ \\ (_| | | | | | | | | | |   | | (_) | (_) | |',
-        '/_/   \\_\\__,_|_| |_| |_|_|_| |_|   |_|\\___/ \\___/|_|',
+        '     ___',
+        '    /  /',
+        '   /  /_____ _____ _____    ______ _____ _____ _____',
+        '  /  // _  // ___// ___/   /     // _  // ___// ___/',
+        ' /  // ___//__  //__  /   / / / // ___//__  //__  /',
+        '/__//____//____//____/   /_/ /_//____//____//____/',
         '                                            ver. 0.1',
         'Copyright (c) 2012 Jakub Jankiewicz <http://jcubic.pl>',
         'Licensed under GNU LGPL Version 3 license'].join('\n') + '\n';
-    var terminal;
     rpc({
         url: "rpc.php",
         error: function(error) {
@@ -18,9 +19,9 @@ jQuery(function($) {
             } else {
                 message = error.message || error;
             }
-            if (terminal) {
-                terminal.resume();
-                terminal.error(message);
+            if ($.terminal) {
+                $.terminal.resume();
+                $.terminal.error(message);
             } else {
                 alert(message);
             }
@@ -29,7 +30,7 @@ jQuery(function($) {
         window.log = $.proxy(console.log, console);
         window.dir = $.proxy(console.dir, console);
         window.service = service;
-        window.terminal = terminal = $('#shell').terminal(function(command, term) {
+        $.terminal = $('#shell').terminal(function(command, term) {
             if (command == 'config') {
                 term.pause();
                 service.get_config(term.token())(function(config) {
@@ -69,6 +70,9 @@ jQuery(function($) {
                         service('mysql', params);
                     }
                 }, {prompt: '[[;#5555FF;]mysql]> ', name: 'mysql'});
+            } else if (command.match(/ *edit( .*|$)/)) {
+                $.editor.show().refresh().focus();
+                $.terminal.disable();
             } else if (command == 'shell') {
                 var user_name = term.login_name();
                 var home_dir = "/home/" + user_name;
@@ -151,18 +155,141 @@ jQuery(function($) {
             name: 'admin',
             greetings: null
         }).css({overflow: 'auto'});
-
-        //there where some issues with cross-browser CSS only resize
-        $(window).resize(function() {
-            terminal.css('height', $(window).height()-20);
-        }).resize();
-
+        
         // SETUP EDITOR
         
-        // SETUP KEY BINDING
+        // return function that alway return the same value
+        _.always = function(value) {
+            return function() {
+                return value;
+            };
+        };
+        // check if element is in the array
+        _.has = function(list, name) {
+            return _.indexOf(list, name) != -1;
+        };
+        // create object with forced context that never change even if you
+        // call it out of context, so you can pass method as callback that
+        // rely on object context like:
+        //     _.each([1,2,3,4], _.context(console).log)
+        _.context = function(object, context) {
+            var new_object = {};
+            for (var name in object) {
+                (function(name) {
+                    if (typeof object[name] == 'function') {
+                        new_object[name] = function() {
+                            return object[name].apply(context||object, _.toArray(arguments));
+                        };
+                    } else {
+                        new_object[name] = object[name];
+                    }
+                })(name);
+            }
+            return new_object;
+        };
+        //jQuerieze CodeMirror Object
+        (function(editor) {
+            $.editor = $(editor.getWrapperElement());
+            for (var name in editor) {
+                (function(name) {
+                    if (typeof editor[name] == 'function') {
+                        $.editor[name] = function() {
+                            var ret = editor[name].apply($.editor, _.toArray(arguments));
+                            return ret || $.editor;
+                        };
+                    } else {
+                        $.editor[name] = editor[name];
+                    }
+                })(name);
+            }
+        })(CodeMirror($('#editor')[0], {
+            lineNumbers: true,
+            keyMap: 'basic',
+            onKeyEvent: function(editor, event) {
+                var extra = event.ctrlKey || event.metaKey || event.altKey;
+                if (event.ctrlKey) {
+                    if (event.keyCode == 88) { // ctrl+x
+                        $.Event(event).preventDefault();
+                    }
+                }
+                return event.ctrlKey || event.metaKey || event.altKey;
+            }
+        }));
+        $.lessmess = {};
+        $.editor.styles = ['ambiance', 'blackboard', 'cobalt', 'eclipse',
+                           'elegant', 'erlang-dark', 'lesser-dark', 'monokai',
+                           'neat', 'night', 'rubyblue', 'vibrant-ink',
+                           'xq-dark'];
+        (function() {
+            var path = 'libs/CodeMirror/theme/';
+            $.editor.style = function(name) {
+                if (!_.has($.editor.styles, name)) {
+                    throw ('"' + name + '" is invalid style name');
+                }
+                if (!$('style#' + name).length) {
+                    $('<link/>').attr({
+                        rel: 'stylesheet',
+                        id: name,
+                        href: path + name + '.css'
+                    }).appendTo('head');
+                }
+                $.editor.setOption('theme', name);
+                return $.editor;
+            };
+            var ti = 0;
+            $.editor.style.next = function() {
+                $.editor.style($.editor.styles[ti++ % $.editor.styles.length]);
+                return $.editor;
+            };
+        })();
+
+        $.editor.style('vibrant-ink').hide();
+        // enable mousetrap when CodeMirror is enabled
+        $.editor.find('textarea:not(.clipboard)').addClass('mousetrap');
+        $.editor.kill_ring = [];
+
         Mousetrap.bind("ctrl+x ctrl+f", function() {
+            service.file($.terminal.token(), 'rpc.php')(function(file) {
+                $.editor.setValue(file);
+            });
             return false;
         });
-
+        Mousetrap.bind("ctrl+x ctrl+e", function() {
+            try {
+                eval($.editor.getSelection());
+            } catch (e) {
+                // message
+            }
+            return false;
+        });
+        Mousetrap.bind("ctrl+w", function() {
+            
+            return false;
+        });
+        Mousetrap.bind("alt+w", function() {
+            $.editor.kill_ring.push($.editor.getSelection());
+        });
+        Mousetrap.bind("ctrl+y", function() {
+            $.editor.replaceSelection(_.last($.editor.kill_ring));
+        });
+        Mousetrap.bind("ctrl+f", function() {
+            return false;
+        });
+        
+        Mousetrap.bind("ctrl+c ctrl+a", function() {
+            return false;
+        });
+        // SETUP KEY BINDING
+        Mousetrap.bind("ctrl+x ctrl+c", function() {
+            return false;
+        });
+        
+        //there where some issues with cross-browser CSS only resize
+        $(window).resize(function() {
+            var win_height = $(window).height();
+            $.terminal.css('height', win_height-20);
+            $($.editor.getScrollerElement()).css('height', win_height)
+            $.editor.refresh();
+        }).resize();
     }); // rpc
 });

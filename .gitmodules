@@ -11,5 +11,5 @@
 	path = libs/mousetrap
 	url = https://github.com/ccampbell/mousetrap.git
 [submodule "lisb/underscore"]
-	path = lisb/underscore
+	path = libs/underscore
 	url = https://github.com/documentcloud/underscore

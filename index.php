@@ -20,16 +20,27 @@
             font-weight: bold;
         }
     }
+    .CodeMirror {
+        width: 100%;
+        height: 100%;
+        position: absolute !important;
+        top: 0;
+        left: 0;
+    }
     </style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="libs/terminal/js/jquery-1.7.1.min.js"></script>
+    <script src="libs/underscore/underscore-min.js"></script>
     <script src="libs/json-rpc/json-rpc.js"></script>
-    <script src="libs/mousetrap/mousetrap.min.js"></script>
+    <script src="libs/mousetrap/mousetrap.js"></script>
     <script src="libs/terminal/js/jquery.mousewheel-min.js"></script>
     <script src="libs/terminal/js/jquery.terminal-min.js"></script>
+    <script src="libs/CodeMirror/lib/codemirror.js"></script>
+    <link rel="stylesheet" href="libs/CodeMirror/lib/codemirror.css"/>
     <script src="admin.js"></script>
 </head>
 <body>
   <div id="shell"></div>
+  <div id="editor"></div>
 </body>
 </html>
